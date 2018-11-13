@@ -7,20 +7,16 @@ import $ivy.`com.typesafe.akka::akka-stream:2.5.18`
 import akka.actor.{ ActorSystem, Actor, ActorRef, Props, PoisonPill, ActorLogging }
 import akka.stream.ActorMaterializer
 
-import $ivy.`io.kamon::kamon-core:1.1.2`, kamon._
+import $ivy.`io.kamon::kamon-core:1.1.3`, kamon._
+// import $ivy.`io.kamon::kamon-scala:0.6.7`
+// import $ivy.`io.kamon::kamon-akka-2.5:1.1.0`
 import $ivy.`io.kamon::kamon-graphite:1.2.1`
 import $ivy.`io.kamon::kamon-logback:1.0.0`
 import com.typesafe.config.ConfigFactory
-// ConfigFactory.load
 
-def showtime[R](block: => (String, R)): R = {
-    val t0 = System.currentTimeMillis
-    val result = block._2
-    val t1 = System.currentTimeMillis
-    println(block._1 + " took " + (t1 - t0) + "ms")
-    result
-}
-// to run: amm -s --no-remote-logging DbBackup.sc
+// TO RUN:
+// amm -s --no-remote-logging DbCompute.sc
+
 case class CouchDatabase(host: String = "127.0.0.1", port: Int = 5984, protocol: String = "http", username: String = "", password: String = "") {
    def connUrl: String = if (!username.isEmpty) s"${protocol}://${username}:${password}@${host}:${port}" else s"${protocol}://${host}:${port}"
    def databases: List[String] = {
@@ -86,22 +82,13 @@ class DbProcessorActor(databaseId: String) extends Actor with ActorLogging {
   }
 }
 
-val config = ConfigFactory.parseFile(new java.io.File("./application.conf"))
-println(config.getClass)
+val config = ConfigFactory.parseFile(new java.io.File("./application.conf")).resolve
 implicit val system = ActorSystem("dblist", config)
 implicit val mat = ActorMaterializer()
 implicit val ec = system.dispatcher
 
-Kamon.reconfigure(config.getConfig("kamon"))
-// Kamon.loadReportersFromConfig
-
-// showtime("Tasks distribution time", {
-    // val dbActor = system.actorOf(Props[DbListReader])
-    // dbActor ! "start"
-
-    Couch.databases.take(5).map((id: String) => {
-        val merchantActor = system.actorOf(Props(new DbProcessorActor(id)))
-        merchantActor ! DbProcessorActor.Download
-    })
-   
-// })
+Kamon.reconfigure(config)
+Couch.databases.take(5).map((id: String) => {
+    val merchantActor = system.actorOf(Props(new DbProcessorActor(id)))
+    merchantActor ! DbProcessorActor.Download
+})
